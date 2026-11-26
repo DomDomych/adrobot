@@ -1,75 +1,58 @@
-# React + TypeScript + Vite
+# Adrobot frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Административный интерфейс Keitaro: список кампаний, создание кампании и просмотр её фактических потоков. React, строгий TypeScript, Ant Design, TanStack Query и React Router. Редактор офферов в эту итерацию не входит.
 
-Currently, two official plugins are available:
+## Запуск
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Требуется Node.js 22.12+ (проверено на 24) и pnpm. Из корня репозитория:
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```bash
+cd frontend
+pnpm install --frozen-lockfile
+pnpm dev
 ```
 
-You can also install [eslint-plugin-react-x](https://npmx.dev/package/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://npmx.dev/package/eslint-plugin-react-dom) for React-specific lint rules:
+Открыть http://127.0.0.1:5173. Vite проксирует `/api` на `http://127.0.0.1:8000`; backend должен быть запущен отдельно. Порт frontend фиксирован, чтобы совпадать с CORS backend.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+Для существующего настроенного backend (PostgreSQL запущен, миграции применены, серверный `.env` заполнен): в другом терминале из корня выполнить `cd backend && uv run uvicorn app.main:app --reload`. Начальная подготовка backend: `docker compose -f compose.dev.yaml up -d --wait`, затем из `backend/` выполнить `uv sync` и `uv run alembic upgrade head`. Эти команды не запускаются frontend.
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+По умолчанию URL API — `/api/v1`. Для другого адреса можно задать публичную переменную перед запуском/сборкой:
 
+```bash
+VITE_API_BASE_URL=https://your-backend.example/api/v1 pnpm build
 ```
+
+Секреты и Api-Key принадлежат только backend. Любая переменная `VITE_*` доступна браузеру. Не помещайте ключи Keitaro во frontend.
+
+## Поведение
+
+- `/campaigns`: страницы по 20 строк; API запрашивается с `limit=21` и `offset=(page-1)*20`. Дополнительная строка определяет доступность кнопки «Далее». Общий размер списка не выдумывается. Номер страницы сохраняется в URL. Подробности для каждой строки отдельно не запрашиваются.
+- `/campaigns/new`: название нормализуется как в backend; лимит 255 символов учитывает `test_panesh_`. Страна выбирается из ISO 3166-1 alpha-2. Поиск активных офферов по названию/ID с задержкой 350 мс, отменой устаревших запросов и отдельным состоянием ошибки. Отправляется числовой `offer_id` выбранной записи.
+- После HTTP 201 отображаются фактически возвращённые кампания и потоки. Кеш списков инвалидируется и обновляется при следующем просмотре; результат сохраняется в кеше деталей.
+- `/campaigns/:id`: просмотр параметров и потоков. Названия справочников, GEO списка и статистика не выдумываются.
+- POST не повторяется автоматически. Во время отправки форма и переходы заблокированы. `creation_unknown`, `cleanup_failed`, потеря соединения, некорректный ответ и нераспознанные серверные ошибки требуют проверки Keitaro перед повторной отправкой. Предупреждение сохраняется в `sessionStorage` текущей вкладки при перезагрузке/возврате. Если браузер запрещает storage, защита действует до ухода со страницы. Это не серверная идемпотентность и не блокировка между вкладками.
+- `creation_rolled_back` сообщает, что неполная кампания удалена. Строковый и массивный FastAPI `detail` отображаются; ошибки обновления не скрывают ранее загруженные данные.
+- GET ограничен 30 секундами ожидания, POST — 120 секундами с учётом последовательных запросов backend. Прерывание ожидания POST не означает отмену операции на сервере.
+
+## Проверки
+
+```bash
+pnpm build       # tsc -b со strict + production build
+pnpm lint
+pnpm typecheck
+pnpm test
+```
+
+Сборка выводит неблокирующее предупреждение Vite о размере JS-бандла (~1,2 MB до gzip, ~384 kB после gzip).
+
+Vitest + Testing Library запускают приложение с подменой `fetch`: пагинация, загрузка/ошибки/пустой список, просмотр потоков, поиск офферов, валидация, единственный POST при двойном клике, обновление кеша, неопределённый результат и восстановление предупреждения. Тестовые данные существуют только в `src/test/` и не включаются в рабочий UI. Тесты не обращаются к живому стенду.
+
+Для production раздавайте `dist/`, настройте fallback неизвестных путей на `index.html` для React Router и reverse proxy `/api` на FastAPI (либо задайте `VITE_API_BASE_URL` при сборке и настройте CORS). `pnpm preview` показывает сборку, но не является production-сервером; API для preview должен быть доступен отдельно через настроенный адрес.
+
+## Структура
+
+- `src/api/` — HTTP-клиент, типы API и ключи серверного кеша.
+- `src/pages/` — список, создание, просмотр кампании.
+- `src/components/` — layout, поиск оффера, ошибки и конфигурация потоков.
+- `src/lib/countries.ts` — коды стран и нормализация названия.
+- `src/router.tsx` — маршруты; `src/test/` — автономные проверки.
