@@ -9,8 +9,15 @@ interface Props {
   value?: number;
   onChange?: (value: number | undefined) => void;
   disabled?: boolean;
+  excludedIds?: number[];
 }
-export function OfferSelect({ id, value, onChange, disabled }: Props) {
+export function OfferSelect({
+  id,
+  value,
+  onChange,
+  disabled,
+  excludedIds = [],
+}: Props) {
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
   const [selected, setSelected] = useState<Offer>();
@@ -24,10 +31,14 @@ export function OfferSelect({ id, value, onChange, disabled }: Props) {
     enabled: search.trim() === debounced,
   });
   const waiting = search.trim() !== debounced || offers.isFetching;
-  const results = waiting || offers.isError ? [] : (offers.data ?? []);
+  const results =
+    waiting || offers.isError
+      ? []
+      : (offers.data ?? []).filter((offer) => !excludedIds.includes(offer.id));
   const options =
     selected &&
     selected.id === value &&
+    !excludedIds.includes(selected.id) &&
     !results.some((offer) => offer.id === value)
       ? [selected, ...results]
       : results;

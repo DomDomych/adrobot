@@ -1,4 +1,8 @@
 import type {
+  CampaignEditor,
+  EditorStream,
+  EditorAction,
+  FetchEditorRequest,
   Campaign,
   CampaignDetails,
   CreateCampaignRequest,
@@ -121,6 +125,28 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   }
 }
 export const api = {
+  editor: (id: number, signal?: AbortSignal) =>
+    request<CampaignEditor>(`/campaigns/${id}/editor`, { signal }),
+  fetchEditor: (id: number, body: FetchEditorRequest) =>
+    request<CampaignEditor>(`/campaigns/${id}/editor/fetch`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  editorAction: (id: number, streamId: number, body: EditorAction) =>
+    request<EditorStream>(
+      `/campaigns/${id}/editor/streams/${streamId}/actions`,
+      { method: "POST", body: JSON.stringify(body) },
+    ),
+  cancelEditor: (id: number, streamId: number, revision: number) =>
+    request<EditorStream>(
+      `/campaigns/${id}/editor/streams/${streamId}/cancel`,
+      { method: "POST", body: JSON.stringify({ revision }) },
+    ),
+  publishEditor: (id: number, streamId: number, revision: number) =>
+    request<EditorStream>(
+      `/campaigns/${id}/editor/streams/${streamId}/publish`,
+      { method: "POST", body: JSON.stringify({ revision }) },
+    ),
   campaigns: (offset: number, limit: number, signal?: AbortSignal) =>
     request<Campaign[]>(
       `/campaigns?${new URLSearchParams({ offset: String(offset), limit: String(limit) })}`,

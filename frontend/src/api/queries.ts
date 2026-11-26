@@ -8,6 +8,7 @@ export const queryClient = new QueryClient({
 });
 export const PAGE_SIZE = 20;
 export const campaignKeys = {
+  editor: (id: number) => ["campaigns", "editor", id] as const,
   lists: ["campaigns", "list"] as const,
   detail: (id: number) => ["campaigns", "detail", id] as const,
 };
@@ -22,4 +23,14 @@ export const campaignQuery = (id: number) =>
   queryOptions({
     queryKey: campaignKeys.detail(id),
     queryFn: ({ signal }) => api.campaign(id, signal),
+  });
+
+export const editorQuery = (id: number) =>
+  queryOptions({
+    queryKey: campaignKeys.editor(id),
+    queryFn: ({ signal }) => api.editor(id, signal),
+    staleTime: 0,
+    retry: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });

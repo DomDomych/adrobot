@@ -169,7 +169,13 @@ describe("campaign list", () => {
   });
   it("opens details only on explicit navigation", async () => {
     fetchMock.mockImplementation(async (input) =>
-      json(String(input).includes("/campaigns?") ? [campaign(500)] : details),
+      json(String(input).includes("/offers?") ? [] : String(input).includes("/campaigns?") ? [campaign(500)] : {
+          campaign: details.campaign,
+          streams: details.streams.map(stream => ({ stream, editable: stream.schema === 'landings',
+            offers: stream.offers.map(offer => ({ offer_id: offer.offer_id, name: 'Test offer', share: offer.share, active: true, pinned: false })),
+            published_offers: [], dirty: false, revision: stream.schema === 'landings' ? 1 : null,
+            total_share: 100, validation_error: null, missing: false })),
+        }),
     );
     mount();
     await userEvent.click(await screen.findByText("test_panesh_campaign_500"));

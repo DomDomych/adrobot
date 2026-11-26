@@ -1,5 +1,5 @@
 import { Card, Descriptions, Empty, Tag, Typography } from "antd";
-import type { CampaignDetails } from "../api/types";
+import type { Campaign, CampaignDetails } from "../api/types";
 export function CampaignState({ state }: { state: string | null }) {
   if (!state) return <span className="muted">—</span>;
   const labels: Record<string, string> = {
@@ -17,36 +17,7 @@ export function CampaignSummary({ details }: { details: CampaignDetails }) {
   const { campaign, streams } = details;
   return (
     <div className="stack">
-      <Card size="small" title="Параметры кампании">
-        <Descriptions
-          size="small"
-          column={{ xs: 1, sm: 2, lg: 3 }}
-          items={[
-            { key: "id", label: "ID", children: campaign.id },
-            {
-              key: "state",
-              label: "Состояние",
-              children: <CampaignState state={campaign.state} />,
-            },
-            { key: "alias", label: "Алиас", children: campaign.alias ?? "—" },
-            {
-              key: "domain",
-              label: "ID домена",
-              children: campaign.domain_id ?? "—",
-            },
-            {
-              key: "group",
-              label: "ID группы",
-              children: campaign.group_id ?? "—",
-            },
-            {
-              key: "source",
-              label: "ID источника",
-              children: campaign.traffic_source_id ?? "—",
-            },
-          ]}
-        />
-      </Card>
+      <CampaignParameters campaign={campaign} />
       <section aria-label="Потоки" className="stack">
         <h2>
           Потоки <span className="muted">{streams.length}</span>
@@ -84,7 +55,7 @@ export function CampaignSummary({ details }: { details: CampaignDetails }) {
                   </Typography.Text>
                 </p>
               )}
-              {stream.filters.map((filter, index) => (
+              {stream.filters?.map((filter, index) => (
                 <p key={index}>
                   {filter.name === "country" ? "Страна" : filter.name} ·{" "}
                   {filter.mode === "accept" ? "Принимать" : filter.mode}:{" "}
@@ -104,5 +75,40 @@ export function CampaignSummary({ details }: { details: CampaignDetails }) {
           ))}
       </section>
     </div>
+  );
+}
+
+export function CampaignParameters({ campaign }: { campaign: Campaign }) {
+  return (
+    <Card size="small" title="Параметры кампании">
+      <Descriptions
+        size="small"
+        column={{ xs: 1, sm: 2, lg: 3 }}
+        items={[
+          { key: "id", label: "ID", children: campaign.id },
+          {
+            key: "state",
+            label: "Состояние",
+            children: <CampaignState state={campaign.state} />,
+          },
+          { key: "alias", label: "Алиас", children: campaign.alias ?? "—" },
+          {
+            key: "domain",
+            label: "ID домена",
+            children: campaign.domain_id ?? "—",
+          },
+          {
+            key: "group",
+            label: "ID группы",
+            children: campaign.group_id ?? "—",
+          },
+          {
+            key: "source",
+            label: "ID источника",
+            children: campaign.traffic_source_id ?? "—",
+          },
+        ]}
+      />
+    </Card>
   );
 }
