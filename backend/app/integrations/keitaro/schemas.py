@@ -46,9 +46,6 @@ class Stream(Reference):
     type: str
     schema_type: str = Field(alias="schema")
     position: int | None = None
-    action_type: str | None = None
-    action_payload: str | None = None
-    filters: list[StreamFilter] = Field(default_factory=list)
     offers: list[StreamOffer] = Field(default_factory=list)
 
 

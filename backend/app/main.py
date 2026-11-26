@@ -5,7 +5,6 @@ import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.error_handlers import register_error_handlers
 from app.api.router import api_router
 from app.core.config import Settings
 from app.db.session import Database
@@ -31,7 +30,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="Adrobot API", version="0.1.0", lifespan=lifespan)
-register_error_handlers(app)
 
 # During local development Vite and FastAPI run on different ports.
 app.add_middleware(

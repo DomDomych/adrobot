@@ -3,6 +3,7 @@ from fastapi.responses import JSONResponse
 
 from app.core.errors import (
     CampaignCreationError,
+    EditorError,
     InactiveOfferError,
     JournalUnavailable,
 )
@@ -51,4 +52,10 @@ def register_error_handlers(app: FastAPI) -> None:
     async def journal_error(request: Request, exc: JournalUnavailable) -> JSONResponse:
         return JSONResponse(
             status_code=503, content={"code": "journal_unavailable", "detail": str(exc)}
+        )
+
+    @app.exception_handler(EditorError)
+    async def editor_error(request: Request, exc: EditorError) -> JSONResponse:
+        return JSONResponse(
+            status_code=exc.status, content={"code": exc.code, "detail": str(exc)}
         )
