@@ -13,16 +13,7 @@ Adrobot — веб-приложение для создания кампаний
 
 ## Архитектура
 
-```text
-Browser
-   |
-Nginx / Vite
-   |
-FastAPI
-   |-------- Keitaro Admin API
-   |
-PostgreSQL
-```
+![Архитектура Adrobot](docs/architecture.svg)
 
 ## Скриншоты
 
