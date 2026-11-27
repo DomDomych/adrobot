@@ -1,0 +1,23 @@
+# Test-only overlay. Use an explicit disposable Compose project name.
+services:
+  keitaro-stub:
+    image: adrobot-backend:local
+    command: [python, /fixtures/keitaro_stub.py]
+    volumes:
+      - ./e2e:/fixtures:ro
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8081/admin_api/v1/offers')"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+  backend:
+    environment:
+      KEITARO_API_URL: http://keitaro-stub:8081/admin_api/v1
+      KEITARO_ADMIN_URL: http://example.test/admin/
+      KEITARO_API_KEY: unused-test-placeholder
+      HTTP_PROXY: ''
+      HTTPS_PROXY: ''
+      NO_PROXY: localhost,127.0.0.1,postgres,keitaro-stub
+    depends_on:
+      keitaro-stub:
+        condition: service_healthy

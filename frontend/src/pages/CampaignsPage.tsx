@@ -5,6 +5,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { campaignsQuery, PAGE_SIZE } from "../api/queries";
 import type { Campaign } from "../api/types";
 import { CampaignState } from "../components/CampaignSummary";
+import { ReferenceName } from "../components/ReferenceName";
 import { ErrorNotice } from "../components/ErrorNotice";
 export function CampaignsPage() {
   const [params, setParams] = useSearchParams();
@@ -123,19 +124,19 @@ export function CampaignsPage() {
               ),
             },
             {
-              title: "ID домена",
+              title: "Домен",
               dataIndex: "domain_id",
-              render: (value: number | null) => value ?? "—",
+              render: (value: number | null) => <ReferenceName kind="domains" id={value} />,
             },
             {
-              title: "ID группы",
+              title: "Группа",
               dataIndex: "group_id",
-              render: (value: number | null) => value ?? "—",
+              render: (value: number | null) => <ReferenceName kind="groups" id={value} />,
             },
             {
-              title: "ID источника",
+              title: "Источник",
               dataIndex: "traffic_source_id",
-              render: (value: number | null) => value ?? "—",
+              render: (value: number | null) => <ReferenceName kind="traffic_sources" id={value} />,
             },
           ]}
         />

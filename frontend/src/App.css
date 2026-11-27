@@ -270,6 +270,7 @@
   }
   .sidebar nav {
     flex-direction: row;
+    flex-wrap: wrap;
   }
   .sidebar nav a {
     padding: 9px 12px;
@@ -375,3 +376,7 @@
   gap: 16px;
   flex-wrap: wrap;
 }
+
+.pin-button { min-width: 36px; min-height: 36px; }
+.pin-button[aria-pressed="true"] { color: #2563eb; background: #e6efff; }
+.ant-descriptions-item-content { overflow-wrap: anywhere; }

@@ -1,0 +1,69 @@
+name: CI
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16@sha256:ce81150802644ddfac1db4da9e63be6f2a3818aa6ee98a7a28838aeea65dc37a
+        env:
+          POSTGRES_PASSWORD: ci_local
+          POSTGRES_DB: adrobot_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d adrobot_test"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgresql+asyncpg://postgres:ci_local@127.0.0.1:5432/adrobot_test
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: backend/.python-version
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.13.9'
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run pytest -q
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: frontend/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm test
+      - run: pnpm build
+  containers:
+    runs-on: ubuntu-latest
+    env:
+      POSTGRES_PASSWORD: ci_local
+      KEITARO_API_KEY: unused-ci-placeholder
+      KEITARO_API_URL: http://127.0.0.1:9/admin_api/v1
+      APP_PORT: '18080'
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose config --quiet
+      - run: docker compose up --build -d --wait --wait-timeout 180
+      - run: python3 scripts/smoke_stack.py http://127.0.0.1:18080
+      - if: failure()
+        run: docker compose logs --no-color
+      - if: always()
+        run: docker compose down --volumes

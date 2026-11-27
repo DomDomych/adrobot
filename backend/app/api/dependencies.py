@@ -16,7 +16,7 @@ def get_keitaro(request: Request) -> KeitaroClient:
 def get_campaign_service(request: Request) -> CampaignService:
     state = request.app.state
     return CampaignService(
-        state.keitaro, state.settings, OperationJournal(state.database.sessions)
+        state.keitaro, state.settings, OperationJournal(state.database.journal_sessions)
     )
 
 
@@ -29,7 +29,7 @@ def get_editor_service(request: Request) -> EditorService:
     return EditorService(
         state.keitaro,
         EditorRepository(state.database.sessions),
-        OperationJournal(state.database.sessions),
+        OperationJournal(state.database.journal_sessions),
     )
 
 

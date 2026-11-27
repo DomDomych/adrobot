@@ -1,8 +1,8 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 
 class Reference(BaseModel):
-    id: int
+    id: int = Field(gt=0)
     name: str
 
 
@@ -30,15 +30,17 @@ class CampaignCreate(BaseModel):
 
 
 class StreamOffer(BaseModel):
-    offer_id: int
-    share: float
+    offer_id: int = Field(gt=0)
+    share: float = Field(ge=0, le=100, allow_inf_nan=False)
     state: str = "active"
 
 
 class StreamFilter(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
     name: str
     mode: str
-    payload: list[str]
+    payload: JsonValue
 
 
 class Stream(Reference):
@@ -46,6 +48,18 @@ class Stream(Reference):
     type: str
     schema_type: str = Field(alias="schema")
     position: int | None = None
+    action_type: str | None = None
+    action_payload: str | None = None
+    filters: list[StreamFilter] = Field(default_factory=list)
+    # Routing fields must survive validation for optimistic conflict detection.
+    state: str | None = None
+    weight: float | None = None
+    filter_or: bool | None = None
+    collect_clicks: bool | None = None
+    offer_selection: str | None = None
+    action_options: JsonValue = None
+    landings: JsonValue = None
+    triggers: JsonValue = None
     offers: list[StreamOffer] = Field(default_factory=list)
 
 

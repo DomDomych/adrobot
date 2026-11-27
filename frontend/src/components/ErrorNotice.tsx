@@ -1,4 +1,5 @@
 import { Alert, Button } from "antd";
+import { errorMessage } from "../lib/errors";
 import { ApiError } from "../api/client";
 export function ErrorNotice({
   error,
@@ -15,7 +16,7 @@ export function ErrorNotice({
       title="Не удалось выполнить запрос"
       description={
         <div className="stack-small">
-          <div>{error.message}</div>
+          <div>{errorMessage(error)}</div>
           {error instanceof ApiError && (
             <small>
               Код: {error.code}

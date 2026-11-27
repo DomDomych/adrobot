@@ -1,22 +1,229 @@
-# Adrobot
+# Adrobot — Keitaro campaign management
 
-A full-stack web application for managing advertising
-campaigns through the Keitaro API.
+Adrobot is a single-account web application for creating Keitaro campaigns and
+editing offer allocations. It integrates with the Keitaro Admin API; it does not
+serve advertising traffic and is not an official Keitaro product.
 
-## Technology Stack
+- **Campaign creation:** a name, ISO country and active catalog offer produce a
+  position-rotated campaign with a country redirect to Google and a fallback
+  offer stream. Domain, group and traffic source come from server settings.
+- **Offer editor:** persistent drafts, add/remove/restore, inline percentages,
+  pin/unpin, explicit synchronization, publication and cancellation.
 
-- Backend: Python, FastAPI, SQLAlchemy
-- Frontend: TypeScript, React, Vite
-- Database: PostgreSQL, Alembic
-- Infrastructure: Docker, Docker Compose, Nginx
+Python 3.12, FastAPI, SQLAlchemy asyncio, asyncpg, PostgreSQL 16, Alembic and HTTPX;
+React, TypeScript, Vite, Ant Design, TanStack Query and React Router. Dependencies
+are locked with uv and pnpm. The interface is in Russian, with the editor action
+names retained in English.
 
-## Project Structure
+```mermaid
+flowchart LR
+    Browser --> Proxy[Nginx / Vite]
+    Proxy --> API[FastAPI]
+    API --> KT[Keitaro Admin API]
+    API --> PG[(PostgreSQL: drafts and operation journal)]
+```
 
-- `backend/` — backend application
-- `frontend/` — frontend application
-- `infrastructure/` — infrastructure configuration
-- `e2e/` — end-to-end tests
+## Screenshots
 
-## Project Status
+Captured from the app with synthetic [local test fixtures](e2e/README.md).
 
-Under development.
+![Campaign creation](docs/screenshots/create-campaign.png)
+![Persistent offer draft](docs/screenshots/editor-draft.png)
+
+## Docker quickstart
+
+Requires Docker Engine with Compose v2.20+ (or newer), outbound access to the image
+and package registries, and an accessible Keitaro account/API key. From a clean clone:
+
+```bash
+cp .env.example .env
+# Edit .env: set KEITARO_API_KEY and POSTGRES_PASSWORD; verify all Keitaro settings.
+docker compose up --build -d --wait --wait-timeout 180
+```
+
+Use a URL-safe database password (letters, digits, underscore or hyphen) in the
+Compose configuration, since it is interpolated into the connection URL.
+Open [the UI](http://127.0.0.1:8080) or [API docs](http://127.0.0.1:8080/docs).
+The frontend uses relative `/api/v1` URLs. Nginx handles SPA deep links and keeps
+API errors as JSON. PostgreSQL and backend have no host ports in this stack.
+
+Startup is ordered: PostgreSQL readiness → one-shot Alembic migration → backend
+readiness → Nginx. A failed migration prevents dependent services from starting.
+Backend runs as a non-root user, without reload. The frontend runtime contains
+Nginx and built assets; Node and package managers remain in build stages. Base
+images are pinned by digest; update those pins deliberately for security updates.
+
+```bash
+docker compose ps
+docker compose logs --tail=100 backend migrate frontend
+docker compose down                         # retains the database volume
+docker compose up -d --wait --wait-timeout 180
+# Before upgrading an existing installation, back up the DB and stop application services:
+docker compose stop frontend backend
+docker compose build
+docker compose run --rm migrate             # explicit, single migration runner
+docker compose up -d --wait --wait-timeout 180
+python3 scripts/smoke_stack.py http://127.0.0.1:8080
+```
+
+The `postgres_data` volume persists drafts, confirmed pins, removed associations
+and the journal. **Do not use `down --volumes` on a database you want to keep.**
+The development stack uses its existing separate `adrobot_pgdata` volume; the
+production configuration neither renames nor deletes it. Do not point an existing
+editor database at another Keitaro instance or account.
+
+`GET /api/v1/health` is liveness; `GET /api/v1/ready` verifies the database and
+migrated tables. Keitaro availability does not control container health or restart
+loops. The smoke script tests these endpoints, a SPA deep link and a JSON API 404
+without contacting Keitaro.
+
+## Configuration
+
+Root `.env` is for Compose. `backend/.env` is for local Python development.
+Neither belongs in Git or in an image. Copy the corresponding example file.
+
+| Variable | Purpose / default |
+| --- | --- |
+| `KEITARO_API_URL` | Admin API base URL; default targets the configured training endpoint |
+| `KEITARO_API_KEY` | Required secret; backend only, never a `VITE_*` variable |
+| `KEITARO_ADMIN_URL` | Admin UI base URL used by **View in KT** |
+| `KEITARO_DOMAIN_ID` | Domain ID; default `1813` |
+| `KEITARO_GROUP_ID` | Campaign group ID; default `10332` |
+| `KEITARO_TRAFFIC_SOURCE_ID` | Source ID; default `836` |
+| `KEITARO_TIMEOUT_SECONDS` | HTTPX request timeout, default `15`; connect timeout `5` |
+| `DATABASE_URL` | Local backend: `postgresql+asyncpg://user:password@host:5432/database`; generated by Compose |
+| `POSTGRES_USER`, `POSTGRES_DB` | Compose database identity, default `adrobot` |
+| `POSTGRES_PASSWORD` | Required Compose database password |
+| `APP_PORT` | Loopback UI port, default `8080` |
+| `HTTPS_PROXY`, `HTTP_PROXY`, `NO_PROXY` | Optional runtime proxy settings |
+
+Reference names are loaded through `/api/v1/references` and cached in the browser
+for five minutes. Missing/unavailable names fall back to IDs. The endpoint exposes
+only reference IDs/names and the admin URL, never the API key.
+
+For local requests behind a system proxy, use `curl --noproxy '*'` or include
+`localhost,127.0.0.1,backend,postgres` in `NO_PROXY`/`no_proxy`. Do not disable the
+system proxy or VPN globally. A proxy listening on host `127.0.0.1` is not reachable
+as container `127.0.0.1`; configure a reachable proxy endpoint for backend runtime.
+Image pulls use the Docker **daemon** proxy. Package downloads during builds need
+build proxy settings separately; see [proxy troubleshooting](docs/OPERATIONS.md).
+
+## Local development
+
+Requires Python from `backend/.python-version`, uv 0.13.9, Node from `.node-version`
+and pnpm 12.23.0 (also pinned in `frontend/package.json`).
+
+```bash
+docker compose -f compose.dev.yaml up -d --wait
+cp backend/.env.example backend/.env
+# Set the backend API key; retain the dev DB URL unless you changed compose.dev.yaml.
+cd backend
+uv sync --locked
+uv run alembic upgrade head
+uv run uvicorn app.main:app --reload --host 127.0.0.1
+```
+
+In another terminal:
+
+```bash
+cd frontend
+pnpm install --frozen-lockfile
+pnpm dev
+```
+
+UI: [127.0.0.1:5173](http://127.0.0.1:5173), local API docs:
+[127.0.0.1:8000/docs](http://127.0.0.1:8000/docs). Vite proxies `/api` to port 8000.
+`VITE_API_BASE_URL` is optional for a separate API deployment and is public data.
+
+## Editor workflow and guarantees
+
+Opening a campaign uses GET: it initializes missing local snapshots and preserves
+existing drafts. **Fetch Streams from KT** explicitly refreshes from Keitaro. If
+there are drafts, discarding them requires confirmation with their revisions.
+Fetch never writes to Keitaro. Redirect streams are read-only; an empty landings
+stream can receive its first offer.
+
+Add, Remove, Bring Back, Pin, Unpin and inline share edits update a PostgreSQL draft.
+Click a percentage and use Enter to save or Escape to cancel. Manual input is an
+integer 0–100. The backend alone calculates allocations. Pinned shares stay fixed;
+the free remainder is split equally with rounding remainder assigned by ascending
+offer ID. Valid external fractional/unequal allocations are preserved. Editing a
+share does not implicitly pin it; a pinned share can be explicitly edited.
+
+Yellow means a draft exists. **Push to KT** publishes only the selected stream's
+active offers. **Cancel** restores the last confirmed offers, percentages and pins,
+removing new unpublished additions. Removed rows stay available for Bring Back,
+even after publication/restart. An active 0% offer is different from a removed row.
+The last active offer cannot be removed through the editor.
+
+Pin-only changes are drafts too. A pin-only Push validates the remote state and
+confirms local pins without PUT when offers are unchanged. Invalid external totals
+produce a normalized draft when possible; otherwise the editor explains the
+problem and allows pins/shares to be corrected. There is no automatic publication.
+
+Revisions reject stale tabs; transaction advisory locks serialize a campaign across
+Adrobot workers. Push checks remote identity, schema, routing and allocations.
+External conflicts preserve the draft. A lost PUT response or failed local commit
+can be reconciled by an explicit Push retry: if remote routing and desired offers
+already match, no second PUT is sent. There is no automatic retry of mutations.
+Keitaro has no atomic compare-and-swap, so an external change between GET and PUT
+cannot be fully prevented. See [API contract](backend/EDITOR_API.md).
+
+Creation is not remotely idempotent. When the campaign ID is unknown after timeout,
+5xx or invalid response, inspect Keitaro before retrying. Known partial creations
+are compensated by deleting only the newly created campaign. A failed cleanup is
+reported with its ID when available. The UI retains an uncertain-creation warning
+across reloads in the current tab; it is not a cross-tab/server idempotency key.
+
+## Tests and CI
+
+```bash
+cd backend
+uv sync --locked
+uv run ruff check .
+uv run ruff format --check .
+uv run pytest -q
+
+cd ../frontend
+pnpm install --frozen-lockfile
+pnpm lint
+pnpm test
+pnpm build
+```
+
+Without `TEST_DATABASE_URL`, real PostgreSQL tests are explicitly skipped. To run
+them against a **dedicated disposable server**, whose database name contains `test`:
+
+```bash
+# From backend/; the test role needs CREATEDB permission.
+TEST_DATABASE_URL=postgresql+asyncpg://postgres:test_password@127.0.0.1:55439/adrobot_test \
+  uv run pytest -q
+```
+
+Each integration test creates and drops only its own randomly named database.
+Coverage includes migration 0001 → 0002 with journal preservation, repeated upgrade,
+round trips, rollback, restart, campaign-scoped locks, competing revisions, journal
+failures, and failed commit after remote publication. Keitaro is mocked in all
+unit/integration tests; tests never read a working key or write to the external stand.
+
+GitHub Actions runs backend lint/format/tests with PostgreSQL 16; frontend frozen
+install/lint/tests/build; and Docker build/start/readiness/SPA/API smoke with an
+unusable upstream URL/key. There is no deployment job. Manual verification procedures and operational
+limitations are documented in the [operations guide](docs/OPERATIONS.md).
+
+## Deployment limits
+
+This is a trusted, single-user/single-account tool with **no user authentication**.
+The default published port binds to loopback. Add authentication, authorization and
+TLS at a trusted gateway before exposing it to a network. Do not expose PostgreSQL
+or backend directly. No statistics, Trends, clicks or fabricated reports are shown.
+
+The database journal records remote operation outcomes, not a distributed transaction
+with Keitaro. A `pending`/`unknown` record requires inspection; it does not prove
+failure. Editor transactions hold a connection/lock during HTTP requests; journal
+writes use a separate bounded pool to avoid nested pool starvation. This is sized
+for a small trusted tool, not a high-throughput service. No load-test claims are made.
+
+Private task materials, company screenshots, archives and `.env` files are excluded
+from Git and Docker contexts. Use only your own sanitized screenshots in a public
+repository. Rotate any key previously shared in chat/screenshots before handoff.

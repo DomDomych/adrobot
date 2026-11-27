@@ -1,4 +1,5 @@
 import { Alert } from "antd";
+import { errorMessage } from "../../lib/errors";
 import { ApiError } from "../../api/client";
 import { uncertainEditorError } from "./useCampaignEditor";
 
@@ -46,7 +47,7 @@ export function EditorError({
               ? "Проверьте поток через View in KT. Запрошено актуальное состояние редактора. Если черновик остался, можно явно повторить Push to KT: backend сверит уже применённые изменения. Автоматического повтора нет."
               : error instanceof ApiError && messages[error.code]
                 ? messages[error.code]
-                : error.message}
+                : errorMessage(error)}
           </p>
           {uncertain && !publishing && (
             <p>

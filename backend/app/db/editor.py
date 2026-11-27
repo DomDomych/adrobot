@@ -2,11 +2,11 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from sqlalchemy import select, text
-from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.errors import EditorError
 from app.db.models import StreamEditorState
+from app.db.session import STORAGE_ERRORS
 
 
 class EditorRepository:
@@ -25,10 +25,12 @@ class EditorRepository:
                     {"namespace": 193730, "campaign_id": campaign_id},
                 )
                 yield EditorTransaction(session)
-        except SQLAlchemyError as exc:
+        except STORAGE_ERRORS as exc:
             raise EditorError(
                 "editor_storage_unavailable",
-                "Editor storage unavailable or busy; reload before retrying",
+                "Editor storage unavailable or busy; "
+                "publication may have reached Keitaro; "
+                "reload and verify before retrying",
                 503,
             ) from exc
 

@@ -5,6 +5,7 @@ import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.error_handlers import register_error_handlers
 from app.api.router import api_router
 from app.core.config import Settings
 from app.db.session import Database
@@ -39,3 +40,5 @@ app.add_middleware(
     allow_headers=["Content-Type"],
 )
 app.include_router(api_router, prefix="/api/v1")
+
+register_error_handlers(app)

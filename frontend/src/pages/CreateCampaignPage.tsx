@@ -14,7 +14,7 @@ import { ArrowLeftOutlined, CheckCircleOutlined } from "@ant-design/icons";
 import { Link, useBeforeUnload, useBlocker } from "react-router-dom";
 import { api, ApiError, isUncertainCreation } from "../api/client";
 import { campaignKeys } from "../api/queries";
-import type { CreateCampaignRequest } from "../api/types";
+import type { CreateCampaignRequest, Offer } from "../api/types";
 import { countries, normalizeName, validateName } from "../lib/countries";
 import { OfferSelect } from "../components/OfferSelect";
 import { ErrorNotice } from "../components/ErrorNotice";
@@ -42,6 +42,7 @@ export function CreateCampaignPage() {
   const queryClient = useQueryClient();
   const submitting = useRef(false);
   const [recovery, setRecovery] = useState(readRecovery);
+  const [selectedOffer, setSelectedOffer] = useState<Offer>();
   const [verified, setVerified] = useState(false);
   const name = Form.useWatch("name", form) as string | undefined;
   const geo = Form.useWatch("geo", form) as string | undefined;
@@ -108,7 +109,7 @@ export function CreateCampaignPage() {
           title="Кампания создана"
           description={`#${mutation.data.campaign.id} · ${mutation.data.campaign.name}`}
         />
-        <CampaignSummary details={mutation.data} />
+        <CampaignSummary details={mutation.data} selectedOffer={selectedOffer} />
         <Space wrap>
           <Link to="/campaigns">
             <Button type="primary">К списку кампаний</Button>
@@ -249,7 +250,7 @@ export function CreateCampaignPage() {
                 },
               ]}
             >
-              <OfferSelect disabled={pending} />
+              <OfferSelect disabled={pending} onSelectOffer={setSelectedOffer} />
             </Form.Item>
             <div className="form-actions">
               <Button

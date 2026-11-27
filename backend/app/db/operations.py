@@ -1,12 +1,22 @@
 import logging
+from enum import StrEnum
 
-from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.errors import JournalUnavailable
 from app.db.models import CampaignOperation
+from app.db.session import STORAGE_ERRORS
 
 logger = logging.getLogger(__name__)
+
+
+class OperationStatus(StrEnum):
+    PENDING = "pending"
+    SUCCESS = "success"
+    FAILED = "failed"
+    UNKNOWN = "unknown"
+    CLEANUP_FAILED = "cleanup_failed"
+    ROLLED_BACK = "rolled_back"
 
 
 class OperationJournal:
@@ -17,17 +27,21 @@ class OperationJournal:
         try:
             async with self._sessions.begin() as session:
                 entry = CampaignOperation(
-                    operation=operation, status="pending", detail=detail
+                    operation=operation, status=OperationStatus.PENDING, detail=detail
                 )
                 session.add(entry)
                 await session.flush()
                 return entry.id
-        except SQLAlchemyError as exc:
+        except STORAGE_ERRORS as exc:
             logger.error("Could not initialize operation journal")
             raise JournalUnavailable("Operation journal is unavailable") from exc
 
     async def finish(
-        self, operation_id: int, status: str, campaign_id: int | None, detail: str
+        self,
+        operation_id: int,
+        status: OperationStatus,
+        campaign_id: int | None,
+        detail: str,
     ) -> None:
         # Do not turn a successful remote write into a retryable failure if
         # PostgreSQL becomes unavailable afterwards. The pending row is retained.
@@ -40,7 +54,7 @@ class OperationJournal:
                 entry.status = status
                 entry.campaign_id = campaign_id
                 entry.detail = detail
-        except SQLAlchemyError:
+        except STORAGE_ERRORS:
             logger.error(
                 "Could not finalize operation %s: status=%s campaign_id=%s",
                 operation_id,

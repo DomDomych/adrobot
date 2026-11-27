@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Select, Spin } from "antd";
 import { api } from "../api/client";
 import type { Offer } from "../api/types";
+import { offerLabel } from "../lib/labels";
 import { ErrorNotice } from "./ErrorNotice";
 interface Props {
   id?: string;
@@ -10,6 +11,7 @@ interface Props {
   onChange?: (value: number | undefined) => void;
   disabled?: boolean;
   excludedIds?: number[];
+  onSelectOffer?: (offer: Offer | undefined) => void;
 }
 export function OfferSelect({
   id,
@@ -17,6 +19,7 @@ export function OfferSelect({
   onChange,
   disabled,
   excludedIds = [],
+  onSelectOffer,
 }: Props) {
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
@@ -59,10 +62,12 @@ export function OfferSelect({
         }}
         options={options.map((offer) => ({
           value: offer.id,
-          label: `#${offer.id} · ${offer.name}`,
+          label: offerLabel(offer.id, offer.name),
         }))}
         onChange={(next) => {
-          setSelected(options.find((offer) => offer.id === next));
+          const selectedOffer = options.find((offer) => offer.id === next);
+          setSelected(selectedOffer);
+          onSelectOffer?.(selectedOffer);
           onChange?.(next);
           setSearch("");
         }}

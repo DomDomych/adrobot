@@ -77,13 +77,14 @@ let fetchMock: ReturnType<typeof vi.fn<typeof fetch>>;
 beforeEach(() => {
   fetchMock = vi.fn<typeof fetch>(async (input) => {
     const url = String(input);
+    if (url === "/api/v1/references") return json({ domains: [], groups: [], traffic_sources: [], unavailable: [], admin_url: "https://tracker.example/admin/" });
     if (url.includes("/offers?")) return json([offer]);
     if (url.includes("/campaigns?")) return json([]);
     throw new Error(`Unexpected request: ${url}`);
   });
   vi.stubGlobal("fetch", fetchMock);
 });
-function mount(path = "/campaigns") {
+async function mount(path = "/campaigns") {
   const client = new QueryClient({
     defaultOptions: {
       queries: { retry: false, gcTime: Infinity },
@@ -98,6 +99,7 @@ function mount(path = "/campaigns") {
       </QueryClientProvider>
     </ConfigProvider>,
   );
+  await screen.findByRole("heading", { name: path === "/campaigns/new" ? "Создать кампанию" : "Список кампаний" });
   return { client, router, ...view };
 }
 async function fillForm() {
@@ -119,6 +121,7 @@ const posts = () =>
 describe("campaign list", () => {
   it("uses one lookahead record without a fictitious total or detail requests", async () => {
     fetchMock.mockImplementation(async (input) => {
+      if (String(input) === "/api/v1/references") return json({ domains: [], groups: [], traffic_sources: [], unavailable: [], admin_url: "https://tracker.example/admin/" });
       const offset = new URL(String(input), "http://local").searchParams.get(
         "offset",
       );
@@ -128,7 +131,7 @@ describe("campaign list", () => {
           : [campaign(21)],
       );
     });
-    mount();
+    await mount();
     await screen.findByText("test_panesh_campaign_1");
     expect(
       screen.queryByText("test_panesh_campaign_21"),
@@ -138,6 +141,7 @@ describe("campaign list", () => {
     expect(screen.getByRole("button", { name: "Далее" })).toBeDisabled();
     expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
       "/api/v1/campaigns?offset=0&limit=21",
+      "/api/v1/references",
       "/api/v1/campaigns?offset=20&limit=21",
     ]);
     await userEvent.click(screen.getByRole("button", { name: "Назад" }));
@@ -151,7 +155,7 @@ describe("campaign list", () => {
           respond = resolve;
         }),
     );
-    mount();
+    await mount();
     expect(screen.getByText("Загрузка кампаний…")).toBeInTheDocument();
     await act(async () =>
       respond(
@@ -161,7 +165,7 @@ describe("campaign list", () => {
         ),
       ),
     );
-    await screen.findByText("Keitaro is unavailable");
+    await screen.findByText("Keitaro недоступен. Проверьте соединение и настройки сервера.");
     await userEvent.click(
       screen.getByRole("button", { name: "Повторить загрузку" }),
     );
@@ -169,7 +173,7 @@ describe("campaign list", () => {
   });
   it("opens details only on explicit navigation", async () => {
     fetchMock.mockImplementation(async (input) =>
-      json(String(input).includes("/offers?") ? [] : String(input).includes("/campaigns?") ? [campaign(500)] : {
+      json(String(input) === "/api/v1/references" ? { domains: [], groups: [], traffic_sources: [], unavailable: [], admin_url: "https://tracker.example/admin/" } : String(input).includes("/offers?") ? [] : String(input).includes("/campaigns?") ? [campaign(500)] : {
           campaign: details.campaign,
           streams: details.streams.map(stream => ({ stream, editable: stream.schema === 'landings',
             offers: stream.offers.map(offer => ({ offer_id: offer.offer_id, name: 'Test offer', share: offer.share, active: true, pinned: false })),
@@ -177,7 +181,7 @@ describe("campaign list", () => {
             total_share: 100, validation_error: null, missing: false })),
         }),
     );
-    mount();
+    await mount();
     await userEvent.click(await screen.findByText("test_panesh_campaign_500"));
     await screen.findByText("1. Geo AU");
     expect(screen.getByText("https://google.com")).toBeInTheDocument();
@@ -187,7 +191,7 @@ describe("campaign list", () => {
 
 describe("creation", () => {
   it("validates required fields without sending POST", async () => {
-    mount("/campaigns/new");
+    await mount("/campaigns/new");
     await userEvent.click(
       screen.getByRole("button", { name: "Создать кампанию" }),
     );
@@ -208,7 +212,7 @@ describe("creation", () => {
           })
         : original(input, init),
     );
-    const { client } = mount("/campaigns/new");
+    const { client } = await mount("/campaigns/new");
     client.setQueryData([...campaignKeys.lists, 1], []);
     const user = await fillForm();
     expect(
@@ -256,7 +260,7 @@ describe("creation", () => {
       if (code === "invalid_response") return json({ ok: true }, 201);
       return json({ code, detail: "Check Keitaro", campaign_id: 500 }, 502);
     });
-    mount("/campaigns/new");
+    await mount("/campaigns/new");
     const user = await fillForm();
     await user.click(screen.getByRole("button", { name: "Создать кампанию" }));
     await screen.findByText("Сначала проверьте кампанию в Keitaro");
@@ -274,7 +278,7 @@ describe("creation", () => {
   });
   it("preserves uncertain-operation warning after remount", async () => {
     sessionStorage.setItem("adrobot:unconfirmed-creation", "test_panesh_lost");
-    mount("/campaigns/new");
+    await mount("/campaigns/new");
     expect(screen.getByText(/test_panesh_lost/)).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Создать кампанию" }),
@@ -285,7 +289,7 @@ describe("creation", () => {
     fetchMock.mockResolvedValueOnce(
       json({ detail: "Offer search unavailable" }, 503),
     );
-    mount("/campaigns/new");
+    await mount("/campaigns/new");
     await screen.findByText("Offer search unavailable");
     fireEvent.change(screen.getByLabelText("Название кампании"), {
       target: { value: "draft" },
@@ -301,7 +305,7 @@ describe("creation", () => {
     expect(screen.getByLabelText("Название кампании")).toHaveValue("draft");
   });
   it("does not submit free-form offer text", async () => {
-    mount("/campaigns/new");
+    await mount("/campaigns/new");
     const user = userEvent.setup();
     await user.type(
       screen.getByRole("combobox", { name: "Оффер" }),
@@ -353,4 +357,25 @@ describe("API contracts", () => {
     expect(validateName("a".repeat(244))).not.toBeNull();
     expect(validateName("😀".repeat(243))).toBeNull();
   });
+});
+
+it.each([0, 20, 40, 41])("paginates exactly %i campaigns with lookahead", async (count) => {
+  const rows = Array.from({length:count}, (_, i) => campaign(i + 1));
+  fetchMock.mockImplementation(async (input) => {
+    const url = new URL(String(input), "http://local");
+    if (url.pathname.endsWith("/references")) return json({ domains: [], groups: [], traffic_sources: [], unavailable: [], admin_url: "https://tracker.example/admin/" });
+    const start = Number(url.searchParams.get("offset"));
+    return json(rows.slice(start, start + Number(url.searchParams.get("limit"))));
+  });
+  await mount();
+  if (count === 0) await screen.findByText("Кампаний пока нет");
+  else await screen.findByText("test_panesh_campaign_1");
+  for (let page = 1; page < Math.ceil(count / 20); page++) {
+    await userEvent.click(screen.getByRole("button", {name:"Далее"}));
+    await screen.findByText(`test_panesh_campaign_${page * 20 + 1}`);
+  }
+  expect(screen.getByRole("button", {name:"Далее"})).toBeDisabled();
+  const requests = fetchMock.mock.calls.map(([url]) => String(url));
+  expect(requests.filter(url => url.includes("/campaigns?"))).toHaveLength(Math.max(1, Math.ceil(count / 20)));
+  expect(requests.filter(url => url.endsWith("/references"))).toHaveLength(count ? 1 : 0);
 });

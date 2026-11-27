@@ -16,6 +16,8 @@ import {
   UploadOutlined,
 } from "@ant-design/icons";
 import type { EditorOffer, EditorStream, OfferAction } from "../../api/types";
+import { offerLabel, streamType } from "../../lib/labels";
+import { distributionMessage } from "../../lib/errors";
 import { OfferSelect } from "../OfferSelect";
 import { EditorError } from "./EditorError";
 import type { EditorOperation } from "./useCampaignEditor";
@@ -86,7 +88,7 @@ function ShareCell({
           }
         }}
       />
-      <span className="field-hint">Enter — сохранить · Esc — отменить</span>
+      <span className="field-hint">0–100 · Enter — сохранить · Esc — отменить</span>
       {error && (
         <span role="alert" className="input-error">
           {error}
@@ -134,7 +136,7 @@ export function EditorStreamCard({
         }
         extra={
           <Tag>
-            {data.stream.type === "default" ? "Замыкающий" : data.stream.type}
+            {streamType(data.stream.type)}
           </Tag>
         }
       >
@@ -180,7 +182,7 @@ export function EditorStreamCard({
                 key: "offer",
                 render: (_, offer) => (
                   <div className="editor-offer-name">
-                    <span className="mono">#{offer.offer_id}</span> {offer.name}
+                    {offerLabel(offer.offer_id, offer.name)}
                     {!offer.active && (
                       <span className="removed-label">Удалён</span>
                     )}
@@ -219,7 +221,7 @@ export function EditorStreamCard({
                     >
                       <Button
                         type="text"
-                        size="small"
+                        className="pin-button"
                         aria-label={`${offer.pinned ? "Unpin" : "Pin"} ${offer.offer_id}`}
                         aria-pressed={offer.pinned}
                         disabled={unavailable}
@@ -313,7 +315,7 @@ export function EditorStreamCard({
               type="warning"
               showIcon
               title="Публикация недоступна"
-              description={data.validation_error}
+              description={distributionMessage(data.validation_error)}
             />
           )}
         </div>

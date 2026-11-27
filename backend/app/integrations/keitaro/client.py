@@ -82,9 +82,12 @@ class KeitaroClient:
         )
 
     async def get_campaign(self, campaign_id: int) -> Campaign:
-        return await self._request(
+        campaign = await self._request(
             "GET", f"campaigns/{campaign_id}", TypeAdapter(Campaign)
         )
+        if campaign.id != campaign_id:
+            raise KeitaroContractError("Unexpected campaign ID in Keitaro response")
+        return campaign
 
     async def create_campaign(self, data: CampaignCreate) -> Campaign:
         return await self._request(
@@ -106,12 +109,20 @@ class KeitaroClient:
         return await self._request("GET", f"streams/{stream_id}", TypeAdapter(Stream))
 
     async def create_stream(self, data: StreamCreate) -> Stream:
-        return await self._request(
+        stream = await self._request(
             "POST",
             "streams",
             TypeAdapter(Stream),
             payload=data.model_dump(mode="json", by_alias=True, exclude_none=True),
         )
+        if (
+            stream.campaign_id != data.campaign_id
+            or stream.schema_type != data.schema_type
+            or stream.type != data.type
+            or (data.offers is not None and stream.offers != data.offers)
+        ):
+            raise KeitaroContractError("Unexpected stream creation response")
+        return stream
 
     async def replace_stream_offers(
         self, stream_id: int, offers: list[StreamOffer]
@@ -127,7 +138,10 @@ class KeitaroClient:
         return await self._request("GET", "offers", TypeAdapter(list[Offer]))
 
     async def get_offer(self, offer_id: int) -> Offer:
-        return await self._request("GET", f"offers/{offer_id}", TypeAdapter(Offer))
+        offer = await self._request("GET", f"offers/{offer_id}", TypeAdapter(Offer))
+        if offer.id != offer_id:
+            raise KeitaroContractError("Unexpected offer ID in Keitaro response")
+        return offer
 
     async def list_domains(self) -> list[Reference]:
         return await self._request("GET", "domains", TypeAdapter(list[Reference]))

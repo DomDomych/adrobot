@@ -1,7 +1,7 @@
 from app.core.errors import EditorError
 from app.db.editor import EditorRepository, EditorTransaction
 from app.db.models import StreamEditorState
-from app.db.operations import OperationJournal
+from app.db.operations import OperationJournal, OperationStatus
 from app.integrations.keitaro.client import KeitaroClient
 from app.integrations.keitaro.exceptions import KeitaroError
 from app.integrations.keitaro.schemas import Offer, Stream, StreamOffer
@@ -164,6 +164,12 @@ class EditorService:
                         "invalid_upstream", "Stream belongs to another campaign", 502
                     )
                 if not editable(stream):
+                    if (
+                        data is None
+                        and stream.id in states
+                        and states[stream.id].draft is not None
+                    ):
+                        continue
                     result.append(EditorStream(stream=stream, editable=False))
                     continue
                 state = states.pop(stream.id, None)
@@ -210,6 +216,21 @@ class EditorService:
             )
         return state
 
+    async def _editable_remote(self, campaign_id: int, stream_id: int) -> Stream:
+        try:
+            remote = await self._client.get_stream(stream_id)
+        except KeitaroError as exc:
+            if exc.upstream_status == 404:
+                raise EditorError(
+                    "upstream_conflict", "Stream no longer exists in Keitaro", 409
+                ) from exc
+            raise
+        if remote.campaign_id != campaign_id or not editable(remote):
+            raise EditorError("upstream_conflict", "Stream changed in Keitaro", 409)
+        if remote.id != stream_id:
+            raise EditorError("invalid_upstream", "Unexpected stream ID", 502)
+        return remote
+
     async def _get_offer(self, offer_id: int) -> Offer:
         try:
             offer = await self._client.get_offer(offer_id)
@@ -226,6 +247,7 @@ class EditorService:
     ) -> EditorStream:
         async with self._repository.locked(campaign_id) as tx:
             state = await self._state(tx, campaign_id, stream_id, action.revision)
+            await self._editable_remote(campaign_id, stream_id)
             offers = current(state)
             by_id = {o.offer_id: o for o in offers}
             target = by_id.get(action.offer_id)
@@ -292,25 +314,17 @@ class EditorService:
             error = validation_error(offers)
             if error:
                 raise EditorError("invalid_distribution", error)
-            try:
-                remote = await self._client.get_stream(stream_id)
-            except KeitaroError as exc:
-                if exc.upstream_status == 404:
-                    raise EditorError(
-                        "upstream_conflict", "Stream no longer exists in Keitaro", 409
-                    ) from exc
-                raise
-            if remote.campaign_id != campaign_id or not editable(remote):
-                raise EditorError("upstream_conflict", "Stream changed in Keitaro", 409)
+            remote = await self._editable_remote(campaign_id, stream_id)
             desired = outbound(offers)
             remote_signature = signature(remote)
+            baseline = signature(Stream.model_validate(state.baseline))
             same_offers = offer_signature(remote.offers) == offer_signature(desired)
             same_routing = {
                 k: v for k, v in remote_signature.items() if k != "offers"
-            } == {k: v for k, v in state.baseline.items() if k != "offers"}
+            } == {k: v for k, v in baseline.items() if k != "offers"}
             # If a previous PUT succeeded but its response/commit was lost, the
             # desired remote state is already present; reconcile without a write.
-            if remote_signature != state.baseline and not (
+            if remote_signature != baseline and not (
                 same_offers and same_routing and state.draft is not None
             ):
                 raise EditorError(
@@ -319,7 +333,7 @@ class EditorService:
             if state.draft is None:
                 return view(state)
             if not same_offers:
-                remote = await self._write(campaign_id, stream_id, desired)
+                remote = await self._write(campaign_id, stream_id, desired, remote)
             state.baseline = signature(remote)
             state.published = dump(offers)
             state.draft = None
@@ -327,7 +341,11 @@ class EditorService:
             return view(state)
 
     async def _write(
-        self, campaign_id: int, stream_id: int, desired: list[StreamOffer]
+        self,
+        campaign_id: int,
+        stream_id: int,
+        desired: list[StreamOffer],
+        remote: Stream,
     ) -> Stream:
         detail = f"stream_id={stream_id}"
         operation = await self._journal.start("update", detail)
@@ -336,6 +354,8 @@ class EditorService:
             if (
                 updated.id != stream_id
                 or updated.campaign_id != campaign_id
+                or signature(updated) | {"offers": []}
+                != signature(remote) | {"offers": []}
                 or offer_signature(updated.offers) != offer_signature(desired)
             ):
                 raise EditorError(
@@ -347,7 +367,7 @@ class EditorService:
             rejected = (
                 exc.upstream_status is not None and 400 <= exc.upstream_status < 500
             )
-            status = "failed" if rejected else "unknown"
+            status = OperationStatus.FAILED if rejected else OperationStatus.UNKNOWN
             await self._journal.finish(operation, status, campaign_id, detail)
             raise EditorError(
                 "publication_failed" if rejected else "publication_unknown",
@@ -355,7 +375,11 @@ class EditorService:
                 502,
             ) from exc
         except EditorError:
-            await self._journal.finish(operation, "unknown", campaign_id, detail)
+            await self._journal.finish(
+                operation, OperationStatus.UNKNOWN, campaign_id, detail
+            )
             raise
-        await self._journal.finish(operation, "success", campaign_id, detail)
+        await self._journal.finish(
+            operation, OperationStatus.SUCCESS, campaign_id, detail
+        )
         return updated

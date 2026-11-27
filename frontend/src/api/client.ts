@@ -1,4 +1,5 @@
 import type {
+  References,
   CampaignEditor,
   EditorStream,
   EditorAction,
@@ -125,6 +126,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   }
 }
 export const api = {
+  references: (signal?: AbortSignal) => request<References>("/references", { signal }),
   editor: (id: number, signal?: AbortSignal) =>
     request<CampaignEditor>(`/campaigns/${id}/editor`, { signal }),
   fetchEditor: (id: number, body: FetchEditorRequest) =>

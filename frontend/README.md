@@ -1,58 +1,33 @@
 # Adrobot frontend
 
-Административный интерфейс Keitaro: список кампаний, создание кампании и просмотр её фактических потоков. React, строгий TypeScript, Ant Design, TanStack Query и React Router. Редактор офферов в эту итерацию не входит.
-
-## Запуск
-
-Требуется Node.js 22.12+ (проверено на 24) и pnpm. Из корня репозитория:
+React/TypeScript administrative UI for campaign creation and the persistent offer
+editor. Setup, deployment and verification are documented in the [root README](../README.md).
 
 ```bash
-cd frontend
 pnpm install --frozen-lockfile
 pnpm dev
-```
-
-Открыть http://127.0.0.1:5173. Vite проксирует `/api` на `http://127.0.0.1:8000`; backend должен быть запущен отдельно. Порт frontend фиксирован, чтобы совпадать с CORS backend.
-
-Для существующего настроенного backend (PostgreSQL запущен, миграции применены, серверный `.env` заполнен): в другом терминале из корня выполнить `cd backend && uv run uvicorn app.main:app --reload`. Начальная подготовка backend: `docker compose -f compose.dev.yaml up -d --wait`, затем из `backend/` выполнить `uv sync` и `uv run alembic upgrade head`. Эти команды не запускаются frontend.
-
-По умолчанию URL API — `/api/v1`. Для другого адреса можно задать публичную переменную перед запуском/сборкой:
-
-```bash
-VITE_API_BASE_URL=https://your-backend.example/api/v1 pnpm build
-```
-
-Секреты и Api-Key принадлежат только backend. Любая переменная `VITE_*` доступна браузеру. Не помещайте ключи Keitaro во frontend.
-
-## Поведение
-
-- `/campaigns`: страницы по 20 строк; API запрашивается с `limit=21` и `offset=(page-1)*20`. Дополнительная строка определяет доступность кнопки «Далее». Общий размер списка не выдумывается. Номер страницы сохраняется в URL. Подробности для каждой строки отдельно не запрашиваются.
-- `/campaigns/new`: название нормализуется как в backend; лимит 255 символов учитывает `test_panesh_`. Страна выбирается из ISO 3166-1 alpha-2. Поиск активных офферов по названию/ID с задержкой 350 мс, отменой устаревших запросов и отдельным состоянием ошибки. Отправляется числовой `offer_id` выбранной записи.
-- После HTTP 201 отображаются фактически возвращённые кампания и потоки. Кеш списков инвалидируется и обновляется при следующем просмотре; результат сохраняется в кеше деталей.
-- `/campaigns/:id`: просмотр параметров и потоков. Названия справочников, GEO списка и статистика не выдумываются.
-- POST не повторяется автоматически. Во время отправки форма и переходы заблокированы. `creation_unknown`, `cleanup_failed`, потеря соединения, некорректный ответ и нераспознанные серверные ошибки требуют проверки Keitaro перед повторной отправкой. Предупреждение сохраняется в `sessionStorage` текущей вкладки при перезагрузке/возврате. Если браузер запрещает storage, защита действует до ухода со страницы. Это не серверная идемпотентность и не блокировка между вкладками.
-- `creation_rolled_back` сообщает, что неполная кампания удалена. Строковый и массивный FastAPI `detail` отображаются; ошибки обновления не скрывают ранее загруженные данные.
-- GET ограничен 30 секундами ожидания, POST — 120 секундами с учётом последовательных запросов backend. Прерывание ожидания POST не означает отмену операции на сервере.
-
-## Проверки
-
-```bash
-pnpm build       # tsc -b со strict + production build
 pnpm lint
-pnpm typecheck
 pnpm test
+pnpm build
 ```
 
-Сборка выводит неблокирующее предупреждение Vite о размере JS-бандла (~1,2 MB до gzip, ~384 kB после gzip).
+Use Node from `../.node-version` and the package manager pinned in `package.json`.
+Vite serves port 5173 and proxies `/api` to `127.0.0.1:8000`. Production assets are
+served by Nginx. Never place a Keitaro API key in frontend files or `VITE_*` variables.
 
-Vitest + Testing Library запускают приложение с подменой `fetch`: пагинация, загрузка/ошибки/пустой список, просмотр потоков, поиск офферов, валидация, единственный POST при двойном клике, обновление кеша, неопределённый результат и восстановление предупреждения. Тестовые данные существуют только в `src/test/` и не включаются в рабочий UI. Тесты не обращаются к живому стенду.
+Routes:
 
-Для production раздавайте `dist/`, настройте fallback неизвестных путей на `index.html` для React Router и reverse proxy `/api` на FastAPI (либо задайте `VITE_API_BASE_URL` при сборке и настройте CORS). `pnpm preview` показывает сборку, но не является production-сервером; API для preview должен быть доступен отдельно через настроенный адрес.
+- `/campaigns`: pages of 20 records with a 21st lookahead row; no fictitious total.
+- `/campaigns/new`: normalized name, ISO country, active offer autocomplete and
+  recovery protection for uncertain creation outcomes.
+- `/campaigns/:id`: draft editor; inline percentages, pins, restore, explicit Fetch,
+  Push and Cancel. The backend owns allocation math and revisions.
 
-## Структура
+Routes load lazily. Mutations never retry automatically. UI operations are guarded
+against duplicate clicks and stale query responses; uncertain operations trigger
+GET recovery while retaining the displayed draft. Offer queries debounce 350 ms
+and use abort signals. Reference queries are shared/cached, not per-row requests.
 
-- `src/api/` — HTTP-клиент, типы API и ключи серверного кеша.
-- `src/pages/` — список, создание, просмотр кампании.
-- `src/components/` — layout, поиск оффера, ошибки и конфигурация потоков.
-- `src/lib/countries.ts` — коды стран и нормализация названия.
-- `src/router.tsx` — маршруты; `src/test/` — автономные проверки.
+The [backend contract](../backend/EDITOR_API.md) explains draft, publication,
+revision conflicts and upstream limitations. Browser tests use mocked fetch;
+they are not live Keitaro E2E verification.

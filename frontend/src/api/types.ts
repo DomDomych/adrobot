@@ -24,7 +24,7 @@ export interface Stream {
   position: number | null;
   action_type?: string | null;
   action_payload?: string | null;
-  filters?: { name: string; mode: string; payload: string[] }[];
+  filters?: { name: string; mode: string; payload: unknown }[];
   offers: { offer_id: number; share: number; state: string }[];
 }
 export interface CampaignDetails {
@@ -66,4 +66,12 @@ export type EditorAction = OfferAction & { revision: number };
 export interface FetchEditorRequest {
   discard_drafts?: boolean;
   revisions?: Record<string, number>;
+}
+
+export interface References {
+  domains: { id: number; name: string }[];
+  groups: { id: number; name: string }[];
+  traffic_sources: { id: number; name: string }[];
+  unavailable: string[];
+  admin_url: string;
 }

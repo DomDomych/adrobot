@@ -1,6 +1,6 @@
 from app.core.config import Settings
 from app.core.errors import CampaignCreationError, InactiveOfferError
-from app.db.operations import OperationJournal
+from app.db.operations import OperationJournal, OperationStatus
 from app.integrations.keitaro.client import KeitaroClient
 from app.integrations.keitaro.exceptions import KeitaroError
 from app.integrations.keitaro.schemas import (
@@ -39,7 +39,7 @@ class CampaignService:
         if offer.state != "active":
             raise InactiveOfferError("Selected offer is not active")
 
-        operation_id = await self._journal.start("create", f"name={data.name}")
+        operation_id = await self._journal.start("create", "Campaign creation")
         try:
             campaign = await self._client.create_campaign(
                 CampaignCreate(
@@ -55,8 +55,8 @@ class CampaignService:
             rejected = (
                 exc.upstream_status is not None and 400 <= exc.upstream_status < 500
             )
-            status = "failed" if rejected else "unknown"
-            await self._journal.finish(operation_id, status, None, f"name={data.name}")
+            status = OperationStatus.FAILED if rejected else OperationStatus.UNKNOWN
+            await self._journal.finish(operation_id, status, None, "Campaign creation")
             if rejected:
                 raise
             raise CampaignCreationError(
@@ -94,7 +94,7 @@ class CampaignService:
                 if cleanup.upstream_status != 404:
                     await self._journal.finish(
                         operation_id,
-                        "cleanup_failed",
+                        OperationStatus.CLEANUP_FAILED,
                         campaign.id,
                         "Manual verification required",
                     )
@@ -104,7 +104,10 @@ class CampaignService:
                         campaign_id=campaign.id,
                     ) from cleanup
             await self._journal.finish(
-                operation_id, "rolled_back", campaign.id, "Stream creation failed"
+                operation_id,
+                OperationStatus.ROLLED_BACK,
+                campaign.id,
+                "Stream creation failed",
             )
             raise CampaignCreationError(
                 "creation_rolled_back",
@@ -113,6 +116,6 @@ class CampaignService:
             ) from exc
 
         await self._journal.finish(
-            operation_id, "success", campaign.id, f"name={data.name}"
+            operation_id, OperationStatus.SUCCESS, campaign.id, "Campaign creation"
         )
         return CampaignDetails(campaign=campaign, streams=[geo_stream, offer_stream])

@@ -1,0 +1,72 @@
+x-backend: &backend
+  image: adrobot-backend:local
+  environment: &backend-environment
+    DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-adrobot}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-adrobot}
+    KEITARO_API_URL: ${KEITARO_API_URL:-https://keitaro-for-tests.etolegko.com/admin_api/v1}
+    KEITARO_ADMIN_URL: ${KEITARO_ADMIN_URL:-https://keitaro-for-tests.etolegko.com/admin/}
+    KEITARO_API_KEY: ${KEITARO_API_KEY:?Set KEITARO_API_KEY in .env}
+    KEITARO_DOMAIN_ID: ${KEITARO_DOMAIN_ID:-1813}
+    KEITARO_GROUP_ID: ${KEITARO_GROUP_ID:-10332}
+    KEITARO_TRAFFIC_SOURCE_ID: ${KEITARO_TRAFFIC_SOURCE_ID:-836}
+    KEITARO_TIMEOUT_SECONDS: ${KEITARO_TIMEOUT_SECONDS:-15}
+    HTTPS_PROXY: ${HTTPS_PROXY:-}
+    HTTP_PROXY: ${HTTP_PROXY:-}
+    NO_PROXY: ${NO_PROXY:-},localhost,127.0.0.1,backend,postgres
+  init: true
+
+services:
+  postgres:
+    image: postgres:16@sha256:ce81150802644ddfac1db4da9e63be6f2a3818aa6ee98a7a28838aeea65dc37a
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-adrobot}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-adrobot}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  migrate:
+    <<: *backend
+    command: [alembic, upgrade, head]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-adrobot}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-adrobot}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: 'no'
+
+  backend:
+    <<: *backend
+    build: ./backend
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.build_opener(urllib.request.ProxyHandler({})).open('http://127.0.0.1:8000/api/v1/ready', timeout=4)"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    image: adrobot-frontend:local
+    ports:
+      - '127.0.0.1:${APP_PORT:-8080}:80'
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, 'http://127.0.0.1/healthz']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

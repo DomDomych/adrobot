@@ -20,6 +20,10 @@ from app.services.campaigns import CampaignService
         ("stream", "rolled_back"),
         ("cleanup", "cleanup_failed"),
         ("campaign_timeout", "unknown"),
+        ("campaign_500", "unknown"),
+        ("campaign_invalid_json", "unknown"),
+        ("campaign_incomplete", "unknown"),
+        ("cleanup_404", "rolled_back"),
     ],
 )
 def test_campaign_creation(failure: str | None, expected_status: str) -> None:
@@ -44,13 +48,29 @@ def test_campaign_creation(failure: str | None, expected_status: str) -> None:
         if path == "campaigns":
             if failure == "campaign_timeout":
                 raise httpx.ReadTimeout("timeout", request=request)
+            if failure == "campaign_500":
+                return httpx.Response(500)
+            if failure == "campaign_invalid_json":
+                return httpx.Response(200, content=b"not json")
+            if failure == "campaign_incomplete":
+                return httpx.Response(200, json={"name": "missing ID"})
             return httpx.Response(201, json={"id": 123, **data})
         if path == "streams":
-            if data["type"] == "default" and failure in {"stream", "cleanup"}:
+            if data["type"] == "default" and failure in {
+                "stream",
+                "cleanup",
+                "cleanup_404",
+            }:
                 return httpx.Response(500)
             return httpx.Response(201, json={"id": len(requests), **data})
         if path == "campaigns/123" and request.method == "DELETE":
-            return httpx.Response(500 if failure == "cleanup" else 204)
+            return httpx.Response(
+                500
+                if failure == "cleanup"
+                else 404
+                if failure == "cleanup_404"
+                else 204
+            )
         raise AssertionError(path)
 
     async def run() -> None:
@@ -86,7 +106,7 @@ def test_campaign_creation(failure: str | None, expected_status: str) -> None:
         "traffic_source_id": 836,
         "type": "position",
     }
-    if failure == "campaign_timeout":
+    if failure and failure.startswith("campaign_"):
         assert len(requests) == 2
         return
     assert requests[2][2]["filters"] == [

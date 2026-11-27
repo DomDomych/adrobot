@@ -25,6 +25,7 @@ beforeEach(() => {
       if (!reply) throw new Error('Unexpected POST');
       return reply();
     }
+    if (path === "/api/v1/references") return json({ domains: [], groups: [], traffic_sources: [], unavailable: [], admin_url: "https://tracker.example/admin/" });
     if (path === base) return json(server);
     if (path.startsWith('/api/v1/offers?')) return json([1, 2, 3].map(id => ({ id, name: `Offer ${id}`, country: [], state: 'active', payout_value: 0, payout_currency: 'USD' })));
     if (path.includes('/campaigns?')) return json([server.campaign]);
@@ -68,7 +69,7 @@ describe('editor workflow', () => {
   it('adds, reloads draft, publishes, removes, publishes removed history, restores and cancels using fresh revisions', async () => {
     const first = mount(); await ready();
     await userEvent.click(region().getByRole('combobox', { name: 'Оффер' }));
-    expect(screen.queryByText('#1 · Offer 1')).not.toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: '#1 · Offer 1' })).not.toBeInTheDocument();
     await userEvent.click(await screen.findByText('#2 · Offer 2'));
     const added = s({ offers: [o(1, 50), o(2, 50)], dirty: true, revision: 2 }); replyStream(added);
     await click('Add'); await settled();
@@ -84,7 +85,7 @@ describe('editor workflow', () => {
     expect(client.getQueryState(campaignKeys.detail(5))?.isInvalidated).toBe(true);
     expect(client.getQueryState([...campaignKeys.lists, 1])?.isInvalidated).toBe(true);
     const removed = s({ ...published, offers: [o(1, 100), o(2, 0, false)], dirty: true, revision: 4 }); replyStream(removed);
-    await userEvent.click(within(region().getByText('Offer 2').closest('tr')!).getByRole('button', { name: 'Remove' })); await settled();
+    await userEvent.click(within(region().getByText('#2 · Offer 2').closest('tr')!).getByRole('button', { name: 'Remove' })); await settled();
     replyStream(s({ ...removed, dirty: false, revision: 5, published_offers: removed.offers }));
     await click('Push to KT'); await settled();
     expect(region().getByRole('button', { name: 'Bring Back' })).toBeEnabled();

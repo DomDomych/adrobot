@@ -34,3 +34,10 @@ export const editorQuery = (id: number) =>
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
+
+export const referencesQuery = queryOptions({
+  queryKey: ["references"],
+  queryFn: ({ signal }) => api.references(signal),
+  staleTime: 300_000,
+  retry: false,
+});

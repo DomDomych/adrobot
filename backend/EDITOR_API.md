@@ -1,8 +1,8 @@
 # Adrobot campaign editor — backend contract
 
-The existing campaign creation and offer search API remains unchanged. The editor
+Campaign creation now validates ISO 3166-1 alpha-2 country membership (not only the two-letter shape). Existing valid requests and editor mutation bodies remain compatible. The editor
 uses the configured Keitaro account, one PostgreSQL database and existing HTTPX
-client. Apply migration `0002_editor_state` before opening the editor.
+client. Apply migration `0002_editor_state` before opening the editor. No additional migration is required by the engineering review.
 
 ## HTTP endpoints
 
@@ -24,7 +24,7 @@ See `/docs` or `/openapi.json` for authoritative request/response types.
 CampaignEditor: `{campaign, streams: EditorStream[]}`.
 EditorStream: `{stream, editable, offers, published_offers, dirty, revision,
 total_share, validation_error, missing}`. `stream` is the last confirmed remote
-stream, with its existing shape (including `schema`). For editable streams,
+stream, including `schema`, filters, action settings and other supported routing fields. For editable streams,
 render `offers` rather than `stream.offers`, which is the published remote
 snapshot. Each editor offer is `{offer_id, name, share, active, pinned}`.
 `published_offers` contains the confirmed local history including removed rows.
@@ -41,7 +41,7 @@ are editable even when empty; redirect streams are read-only and displayed below
 
 Send the latest `revision` from the stream response with every mutation. Replace
 that stream in frontend state/cache with the returned object, not a speculative
-recalculation. Serialize mutations per stream in the UI. Do not automatically
+recalculation. The UI serializes operations per campaign, including Fetch. Do not automatically
 retry mutating requests. Re-fetch editor GET after uncertain local failures.
 
 Examples (replace revision with the latest value):
@@ -87,6 +87,8 @@ writes to Keitaro. If pins prevent normalization, the invalid remote state is
 shown with validation_error; unpin/edit to make it publishable. If all offers
 were removed externally, add a new one before publication.
 
+Actions validate that the remote stream still exists, belongs to this campaign and remains editable. This adds one read-only GET per action; it does not synchronize or discard the draft. Cancel remains local and works for orphaned drafts.
+
 Publish reads the current Keitaro stream before PUT. If it differs from the
 baseline, returns `upstream_conflict` (409), keeping the draft. User may fetch
 and explicitly discard or keep the draft while deciding. There is no atomic CAS
@@ -109,16 +111,26 @@ Reuse existing layout, offer autocomplete, API client and query cache. Add the
 editor to campaign details, use clickable percentages (inline editing), pin icon,
 Add/Remove/Bring Back, Fetch, View in KT, Push, Cancel. Show a total and compact
 error message, preserve removed rows. No fake Stats/Trends. No standalone Edit
-Share button, no separate normalization action. Link to the emulator campaign:
-`https://keitaro-for-tests.etolegko.com/admin/#!/campaign.editor/{campaign_id}`.
-The browser may redirect to `#!/campaign/{id}/main` as observed on the stand.
+Share button, no separate normalization action. Build the admin link from `admin_url` returned by `/api/v1/references` plus
+`/#!/campaign.editor/{campaign_id}`. `KEITARO_ADMIN_URL` controls the base URL.
 
-## Install / verify
+## Read-only metadata and health
 
-From backend: `uv run alembic upgrade head`, `uv run ruff format .`,
-`uv run ruff check --fix .`, `uv run python -m pytest -q`,
-`uv run uvicorn app.main:app --reload`. No added third-party packages.
-Tested locally using mocked Keitaro and in-memory editor repository, OpenAPI and
-PostgreSQL offline migration SQL. Live PostgreSQL and Keitaro write integration
-must be verified in the project environment. Single-account deployment is
-assumed; do not reuse the same local database for a different Keitaro account.
+`GET /api/v1/references` returns `{domains, groups, traffic_sources, unavailable,
+admin_url}`. Catalog entries are `{id, name}`. Failed catalogs are empty and listed
+in `unavailable`; the UI falls back to IDs. The key is never exposed. The browser
+shares one query cached for five minutes across rows/pages.
+
+`GET /api/v1/health` is liveness. `GET /api/v1/ready` checks PostgreSQL and migrated
+tables, returning 503 if unavailable; neither calls Keitaro.
+
+## Upgrade / verify
+
+Existing snapshots from older code omit routing fields. A first Push can therefore
+conservatively return `upstream_conflict`; explicitly Fetch and reapply the reviewed
+draft. No automatic baseline rewrite or silent draft discard occurs.
+
+See [README](../README.md) for locked installs, migrations, unit/frontend tests,
+real PostgreSQL tests and Docker checks. Only read-only checks are automatic on a
+live tracker. A single-account deployment is assumed; do not reuse the same local
+database for a different Keitaro account.

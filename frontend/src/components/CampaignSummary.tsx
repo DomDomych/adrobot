@@ -1,5 +1,7 @@
 import { Card, Descriptions, Empty, Tag, Typography } from "antd";
-import type { Campaign, CampaignDetails } from "../api/types";
+import { ReferenceName } from "./ReferenceName";
+import { offerLabel, streamType, streamSchema } from "../lib/labels";
+import type { Campaign, CampaignDetails, Offer } from "../api/types";
 export function CampaignState({ state }: { state: string | null }) {
   if (!state) return <span className="muted">—</span>;
   const labels: Record<string, string> = {
@@ -13,7 +15,7 @@ export function CampaignState({ state }: { state: string | null }) {
     </Tag>
   );
 }
-export function CampaignSummary({ details }: { details: CampaignDetails }) {
+export function CampaignSummary({ details, selectedOffer }: { details: CampaignDetails; selectedOffer?: Offer }) {
   const { campaign, streams } = details;
   return (
     <div className="stack">
@@ -43,9 +45,9 @@ export function CampaignSummary({ details }: { details: CampaignDetails }) {
             >
               <div className="stream-meta">
                 <Tag>
-                  {stream.type === "default" ? "Замыкающий" : stream.type}
+                  {streamType(stream.type)}
                 </Tag>
-                <Tag>{stream.schema}</Tag>
+                <Tag>{streamSchema(stream.schema)}</Tag>
               </div>
               {stream.action_payload && (
                 <p>
@@ -59,12 +61,12 @@ export function CampaignSummary({ details }: { details: CampaignDetails }) {
                 <p key={index}>
                   {filter.name === "country" ? "Страна" : filter.name} ·{" "}
                   {filter.mode === "accept" ? "Принимать" : filter.mode}:{" "}
-                  {filter.payload.join(", ")}
+                  {Array.isArray(filter.payload) ? filter.payload.join(", ") : String(filter.payload ?? "")}
                 </p>
               ))}
               {stream.offers.map((offer) => (
                 <p key={offer.offer_id}>
-                  Оффер <strong>#{offer.offer_id}</strong>{" "}
+                  <strong>{selectedOffer?.id === offer.offer_id ? offerLabel(offer.offer_id, selectedOffer.name) : `Оффер #${offer.offer_id}`}</strong>{" "}
                   <Tag color="blue">{offer.share}%</Tag>
                   <span className="muted">
                     {offer.state === "active" ? "Активен" : offer.state}
@@ -94,18 +96,18 @@ export function CampaignParameters({ campaign }: { campaign: Campaign }) {
           { key: "alias", label: "Алиас", children: campaign.alias ?? "—" },
           {
             key: "domain",
-            label: "ID домена",
-            children: campaign.domain_id ?? "—",
+            label: "Домен",
+            children: <ReferenceName kind="domains" id={campaign.domain_id} />,
           },
           {
             key: "group",
-            label: "ID группы",
-            children: campaign.group_id ?? "—",
+            label: "Группа",
+            children: <ReferenceName kind="groups" id={campaign.group_id} />,
           },
           {
             key: "source",
-            label: "ID источника",
-            children: campaign.traffic_source_id ?? "—",
+            label: "Источник",
+            children: <ReferenceName kind="traffic_sources" id={campaign.traffic_source_id} />,
           },
         ]}
       />

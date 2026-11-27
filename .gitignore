@@ -46,3 +46,12 @@ logs/
 .DS_Store
 Thumbs.db
 
+
+# Private task context and local review artifacts
+/adrobot_context/
+/adrobot_editor_context/
+*.dump
+*.sql
+*.tar
+*.tar.gz
+*.zip

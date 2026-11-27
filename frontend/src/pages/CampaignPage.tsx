@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import { campaignKeys } from "../api/queries";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { streamSchema } from "../lib/labels";
+import { campaignKeys, referencesQuery } from "../api/queries";
 import { Alert, Button, Card, Empty, Modal, Skeleton, Space, Tag } from "antd";
 import {
   ArrowLeftOutlined,
@@ -29,6 +30,7 @@ export function CampaignPage() {
 }
 function CampaignEditorPage({ id }: { id: number }) {
   const client = useQueryClient();
+  const references = useQuery(referencesQuery);
   const { query, mutation, execute, busy, needsReload } = useCampaignEditor(id);
   const [discard, setDiscard] = useState<FetchEditorRequest | null>(null);
   const blocker = useBlocker(busy);
@@ -102,7 +104,8 @@ function CampaignEditorPage({ id }: { id: number }) {
             Fetch Streams from KT
           </Button>
           <Button
-            href={`https://keitaro-for-tests.etolegko.com/admin/#!/campaign.editor/${id}`}
+            href={references.data?.admin_url ? `${references.data.admin_url.replace(/\/$/, "")}/#!/campaign.editor/${id}` : undefined}
+            disabled={!references.data?.admin_url}
             target="_blank"
             rel="noopener noreferrer"
             icon={<ExportOutlined />}
@@ -206,14 +209,14 @@ function CampaignEditorPage({ id }: { id: number }) {
                     extra={<span className="muted">#{stream.id}</span>}
                   >
                     <Space wrap>
-                      <Tag>{stream.schema}</Tag>
+                      <Tag>{streamSchema(stream.schema)}</Tag>
                       <span className="muted">Только просмотр</span>
                     </Space>
                     {stream.action_payload && <p>{stream.action_payload}</p>}
                     {stream.filters?.map((filter, i) => (
                       <p key={i}>
-                        {filter.name} · {filter.mode}:{" "}
-                        {filter.payload.join(", ")}
+                        {filter.name === "country" ? "Страна" : filter.name} · {filter.mode === "accept" ? "Принимать" : filter.mode}:{" "}
+                        {Array.isArray(filter.payload) ? filter.payload.join(", ") : String(filter.payload ?? "")}
                       </p>
                     ))}
                   </Card>
