@@ -11,12 +11,17 @@ Adrobot — веб-приложение для создания кампаний
 
 Версии зависимостей зафиксированы с помощью uv и pnpm. Интерфейс русскоязычный, названия действий редактора сохранены на английском.
 
-```mermaid
-flowchart LR
-    Browser[Браузер] --> Proxy[Nginx / Vite]
-    Proxy --> API[FastAPI]
-    API --> KT[Keitaro Admin API]
-    API --> PG[(PostgreSQL: черновики и журнал операций)]
+## Архитектура
+
+```text
+Browser
+   |
+Nginx / Vite
+   |
+FastAPI
+   |-------- Keitaro Admin API
+   |
+PostgreSQL
 ```
 
 ## Скриншоты
